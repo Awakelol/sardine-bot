@@ -172,23 +172,31 @@ class VoicePersistence(commands.Cog):
         guild = channel.guild
         current_vc = guild.voice_client
 
-        if current_vc is not None and current_vc.is_connected():
-            if current_vc.channel.id == self.target_channel_id:
+        if current_vc is not None:
+            if current_vc.channel and current_vc.channel.id == self.target_channel_id:
+                # Already connected (or discord.py is already handling its own reconnect
+                # to this exact channel) — don't interfere, just make sure the timer is running.
                 started_fresh = self._start_timer_if_needed()
                 await self.announce_startup(started_fresh)
-                return  # already connected to the right channel
-            await current_vc.move_to(channel)
-            print(f"🔀 Moved voice connection to {channel.name}")
+                return
+            if current_vc.is_connected():
+                await current_vc.move_to(channel)
+                print(f"🔀 Moved voice connection to {channel.name}")
+                started_fresh = self._start_timer_if_needed()
+                await self.announce_startup(started_fresh)
+            else:
+                # A voice client exists but isn't fully connected yet (mid-reconnect).
+                # Let discord.py finish its own reconnect instead of racing it with a new connect().
+                print("⏳ Voice client is mid-reconnect, skipping manual join this cycle.")
+            return
+
+        try:
+            await channel.connect(reconnect=True, self_deaf=True)
+            print(f"🔊 Connected to voice channel: {channel.name}")
             started_fresh = self._start_timer_if_needed()
             await self.announce_startup(started_fresh)
-        else:
-            try:
-                await channel.connect(reconnect=True, self_deaf=True)
-                print(f"🔊 Connected to voice channel: {channel.name}")
-                started_fresh = self._start_timer_if_needed()
-                await self.announce_startup(started_fresh)
-            except Exception as e:
-                print(f"❌ Failed to connect to voice channel: {e}")
+        except Exception as e:
+            print(f"❌ Failed to connect to voice channel: {e}")
 
     @commands.Cog.listener()
     async def on_ready(self):
