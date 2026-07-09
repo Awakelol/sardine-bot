@@ -1,0 +1,36 @@
+{
+  "Game Interests": {
+    "description": "Pick the genres you're into. You can select multiple.",
+    "max_values": 8,
+    "roles": [
+      { "label": "Gacha Games", "emoji": "🎰", "role_name": "Gacha Slave" },
+      { "label": "Souls-like", "emoji": "⚔️", "role_name": "Souls-like Chad" },
+      { "label": "Roguelikes", "emoji": "🔁", "role_name": "Roguelike Addict" },
+      { "label": "MOBA/Strategy Games", "emoji": "🧠", "role_name": "MOBA Chud" },
+      { "label": "FPS/Tactical Shooters", "emoji": "🔫", "role_name": "Shooters Shoot" },
+      { "label": "Fighting Games", "emoji": "🥊", "role_name": "Fighting Gold" },
+      { "label": "Story Driven Games", "emoji": "📖", "role_name": "Lore Hunter" },
+      { "label": "Open-world Games", "emoji": "🗺️", "role_name": "Adventure Time" }
+    ]
+  },
+  "Game Updates": {
+    "description": "Get pinged when there's news for a specific game.",
+    "max_values": 5,
+    "roles": [
+      { "label": "R6 Updates", "emoji": "🛡️", "role_name": "R6 Updates" },
+      { "label": "League Updates", "emoji": "🐉", "role_name": "League Updates" },
+      { "label": "Apex Updates", "emoji": "🚀", "role_name": "Apex Updates" },
+      { "label": "Valorant Updates", "emoji": "🎯", "role_name": "Valorant Updates" },
+      { "label": "Free Games/Steam Sale", "emoji": "🆓", "role_name": "Frugal Gamer" }
+    ]
+  },
+  "Server Pings": {
+    "description": "Choose what server notifications you want to receive.",
+    "max_values": 3,
+    "roles": [
+      { "label": "Announcements Ping", "emoji": "📢", "role_name": "Server Ping" },
+      { "label": "Events Ping", "emoji": "📅", "role_name": "Event Ping" },
+      { "label": "Live Ping", "emoji": "🔴", "role_name": "Live Ping" }
+    ]
+  }
+}

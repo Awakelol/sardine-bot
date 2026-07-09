@@ -1,0 +1,9 @@
+{
+  "rotate_seconds": 120,
+  "statuses": [
+    { "type": "waiting", "text": "when kaya si lance lalaro ulit" },
+    { "type": "listening", "text": "liam and his crashouts" },
+    { "type": "playing", "text": "the chokehold siege has on us..." },
+    { "type": "competing", "text": "nice try lance" }
+  ]
+}
