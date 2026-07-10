@@ -2,3 +2,4 @@ discord.py[voice]
 python-dotenv
 requests
 google-genai
+tavily-python

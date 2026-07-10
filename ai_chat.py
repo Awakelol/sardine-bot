@@ -4,10 +4,19 @@ import discord
 from discord.ext import commands
 from google import genai
 from google.genai import types
+from tavily import TavilyClient
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 MODEL_NAME = "gemini-3.1-flash-lite"  # fast, low-latency tier — avoid gemini-3.5-flash, it's a much slower reasoning model
 STATE_FILE = os.path.join("data", "ai_chat_state.json")
+
+CLASSIFIER_INSTRUCTION = (
+    "You decide whether answering a Discord message requires a live web search "
+    "(current events, scores, prices, dates, facts that change over time, anything post-your-training-data) "
+    "versus general knowledge or casual chat that doesn't need one. "
+    "Reply with exactly one word: SEARCH or CHAT. Nothing else."
+)
 
 SYSTEM_INSTRUCTION = (
     "You are sardine, the Discord bot for a small gaming community server. "
@@ -40,10 +49,46 @@ class AIChat(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+        self.tavily = TavilyClient(api_key=TAVILY_API_KEY) if TAVILY_API_KEY else None
         self.state = load_state()
         print(f"🤖 AI Chat cog loaded — using model: {MODEL_NAME}")
-        print(f"🔑 API key present: {bool(GEMINI_API_KEY)}, length: {len(GEMINI_API_KEY) if GEMINI_API_KEY else 0}")
+        print(f"🔑 Gemini key present: {bool(GEMINI_API_KEY)}, Tavily key present: {bool(TAVILY_API_KEY)}")
         print(f"⚙️ AI chat currently {'ENABLED' if self.state.get('enabled', True) else 'DISABLED'}")
+
+    def _needs_search(self, user_text: str) -> bool:
+        if not self.tavily:
+            return False
+        try:
+            result = self.client.models.generate_content(
+                model=MODEL_NAME,
+                contents=user_text,
+                config=types.GenerateContentConfig(
+                    system_instruction=CLASSIFIER_INSTRUCTION,
+                    max_output_tokens=5,
+                ),
+            )
+            verdict = (result.text or "").strip().upper()
+            return verdict.startswith("SEARCH")
+        except Exception as e:
+            print(f"⚠️ Classifier error, defaulting to no search: {e}")
+            return False
+
+    def _search_context(self, user_text: str) -> str | None:
+        try:
+            results = self.tavily.search(query=user_text, max_results=3, include_answer=True)
+        except Exception as e:
+            print(f"⚠️ Tavily search error: {e}")
+            return None
+
+        parts = []
+        if results.get("answer"):
+            parts.append(results["answer"])
+        for r in results.get("results", []):
+            snippet = r.get("content", "")
+            if snippet:
+                parts.append(f"- {r.get('title', 'source')}: {snippet[:300]}")
+
+        return "\n".join(parts) if parts else None
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -67,13 +112,21 @@ class AIChat(commands.Cog):
 
         async with message.channel.typing():
             try:
+                prompt = user_text
+                if self._needs_search(user_text):
+                    context = self._search_context(user_text)
+                    if context:
+                        prompt = (
+                            f"Current web info that may help:\n{context}\n\n"
+                            f"Now answer this like yourself, in your own words: {user_text}"
+                        )
+
                 response = self.client.models.generate_content(
                     model=MODEL_NAME,
-                    contents=user_text,
+                    contents=prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_INSTRUCTION,
                         max_output_tokens=150,
-                        tools=[types.Tool(google_search=types.GoogleSearch())],
                     ),
                 )
                 reply_text = response.text or "...not sure what to say to that, honestly."
