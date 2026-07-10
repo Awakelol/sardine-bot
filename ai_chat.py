@@ -5,7 +5,7 @@ from google import genai
 from google.genai import types
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL_NAME = "gemini-2.5-flash"  # fast tier — do NOT swap to 3.5 Flash, it's a much slower reasoning model
+MODEL_NAME = "gemini-3.1-flash-lite"  # fast, low-latency tier — avoid gemini-3.5-flash, it's a much slower reasoning model
 
 SYSTEM_INSTRUCTION = (
     "You are sardine, the Discord bot for a small gaming community server. "
