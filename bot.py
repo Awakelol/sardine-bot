@@ -34,6 +34,8 @@ async def on_ready():
         await bot.load_extension("rotating_status")
     if "lfg" not in bot.extensions:
         await bot.load_extension("lfg")
+    if "ai_chat" not in bot.extensions:
+        await bot.load_extension("ai_chat")
 
     # Sync slash commands with Discord
     try:
