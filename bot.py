@@ -17,6 +17,17 @@ intents.message_content = True  # needed if we use text-based commands later
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
+async def on_member_join(member: discord.Member):
+    role = discord.utils.get(member.guild.roles, name="Unverified")
+    if role is None:
+        print(f"⚠️ 'Unverified' role not found in {member.guild.name}, couldn't assign to {member}.")
+        return
+    try:
+        await member.add_roles(role, reason="New member — pending captcha verification")
+    except discord.Forbidden:
+        print(f"⚠️ Missing permissions to assign Unverified role to {member}.")
+
+@bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
     print("Bot is online and ready.")
@@ -36,6 +47,10 @@ async def on_ready():
         await bot.load_extension("lfg")
     if "ai_chat" not in bot.extensions:
         await bot.load_extension("ai_chat")
+    if "log_channel" not in bot.extensions:
+        await bot.load_extension("log_channel")
+    if "guild_tag_role" not in bot.extensions:
+        await bot.load_extension("guild_tag_role")
 
     # Sync slash commands with Discord
     try:
@@ -54,8 +69,8 @@ async def ping(interaction: discord.Interaction):
 @discord.app_commands.checks.has_permissions(manage_roles=True)
 async def post_role_menu(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="Role Picker",
-        description="Click the button below to choose your Interests, Game Update pings, and Server Pings.",
+        title="Role Manager",
+        description="Click the button below to choose your roles for Genre Interests, Game Update pings, and Server Pings to access different parts of the server!",
         color=discord.Color.blurple()
     )
     await interaction.channel.send(embed=embed, view=RoleButtonView())

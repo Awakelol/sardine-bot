@@ -1,7 +1,8 @@
 {
-  "Game Interests": {
+  "Genre Interests": {
     "description": "Pick the genres you're into. You can select multiple.",
     "max_values": 8,
+    "divider_role": "DIVIDER_INTERESTS",
     "roles": [
       { "label": "Gacha Games", "emoji": "🎰", "role_name": "Gacha Slave" },
       { "label": "Souls-like", "emoji": "⚔️", "role_name": "Souls-like Chad" },
@@ -16,6 +17,7 @@
   "Game Updates": {
     "description": "Get pinged when there's news for a specific game.",
     "max_values": 5,
+    "divider_role": "DIVIDER_PINGS",
     "roles": [
       { "label": "R6 Updates", "emoji": "🛡️", "role_name": "R6 Updates" },
       { "label": "League Updates", "emoji": "🐉", "role_name": "League Updates" },
@@ -27,6 +29,7 @@
   "Server Pings": {
     "description": "Choose what server notifications you want to receive.",
     "max_values": 3,
+    "divider_role": "DIVIDER_PINGS",
     "roles": [
       { "label": "Announcements Ping", "emoji": "📢", "role_name": "Server Ping" },
       { "label": "Events Ping", "emoji": "📅", "role_name": "Event Ping" },

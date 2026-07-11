@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from discord.ext import commands, tasks
 
 PENDING_TIMEOUT_MINUTES = 5
+LFG_EXPIRY_HOURS = 2
 
 GAME_OPTIONS = ["R6 Siege", "League of Legends", "Valorant", "Apex Legends", "Brawlhalla", "Custom"]
 
@@ -36,6 +37,8 @@ class LFGPost:
         self.confirmed = []          # list of discord.Member
         self.pending = {}            # {user_id: expiry datetime}
         self.invalidated = False
+        self.invalidation_reason = None
+        self.created_at = datetime.now(timezone.utc)
         self.message: discord.Message | None = None
 
     @property
@@ -62,7 +65,7 @@ class LFGPost:
         title = f"{status_prefix}{self.game} | Players needed: {len(self.confirmed)}/{self.players_needed}"
 
         if self.invalidated:
-            description_lines.append("\n*The creator left the voice channel, this request is no longer active.*")
+            description_lines.append(f"\n*{self.invalidation_reason or 'This request is no longer active.'}*")
 
         embed = discord.Embed(title=title, description="\n".join(description_lines), color=color)
         return embed
@@ -280,7 +283,11 @@ class LFG(commands.Cog):
 
         view = JoinView(self, post)
         await interaction.response.send_message(embed=post.build_embed(), view=view)
-        post.message = await interaction.original_response()
+        original = await interaction.original_response()
+        # Re-fetch as a plain channel message: interaction.original_response() is tied to the
+        # interaction's webhook token, which Discord invalidates after 15 minutes — after that,
+        # edits to it silently fail. A normal message edits fine for as long as the bot has access.
+        post.message = await interaction.channel.fetch_message(original.id)
 
     async def handle_join_click(self, interaction: discord.Interaction, post: LFGPost):
         member = interaction.user
@@ -327,16 +334,17 @@ class LFG(commands.Cog):
         if post.message:
             try:
                 await post.message.edit(embed=post.build_embed())
-            except discord.HTTPException:
-                pass
+            except discord.HTTPException as e:
+                print(f"⚠️ LFG embed update failed for post {post.id}: {e}")
 
-    async def invalidate_post(self, post: LFGPost):
+    async def invalidate_post(self, post: LFGPost, reason: str = "The creator left the voice channel, this request is no longer active."):
         post.invalidated = True
+        post.invalidation_reason = reason
         if post.message:
             try:
                 await post.message.edit(embed=post.build_embed(), view=None)
-            except discord.HTTPException:
-                pass
+            except discord.HTTPException as e:
+                print(f"⚠️ LFG invalidate failed for post {post.id}: {e}")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before, after):
@@ -357,10 +365,16 @@ class LFG(commands.Cog):
     @tasks.loop(minutes=1)
     async def cleanup_pending(self):
         now = datetime.now(timezone.utc)
-        for post in self.active_posts.values():
+        for post in list(self.active_posts.values()):
             expired = [uid for uid, expiry in post.pending.items() if expiry < now]
             for uid in expired:
                 post.pending.pop(uid, None)
+
+            if not post.invalidated and now - post.created_at >= timedelta(hours=LFG_EXPIRY_HOURS):
+                await self.invalidate_post(
+                    post,
+                    reason=f"This request expired after {LFG_EXPIRY_HOURS} hours."
+                )
 
     @cleanup_pending.before_loop
     async def before_cleanup(self):

@@ -1,6 +1,8 @@
 import json
 import discord
 
+import log_utils
+
 CONFIG_PATH = "roles_config.json"
 
 
@@ -15,6 +17,7 @@ class CategorySelect(discord.ui.Select):
     def __init__(self, category_name: str, category_data: dict):
         self.category_name = category_name
         self.role_names = [r["role_name"] for r in category_data["roles"]]
+        self.divider_role = category_data.get("divider_role")
 
         options = [
             discord.SelectOption(
@@ -60,6 +63,19 @@ class CategorySelect(discord.ui.Select):
         if to_remove:
             await member.remove_roles(*to_remove, reason="Role menu deselection")
 
+        await self._sync_divider(guild, member)
+
+        if to_add or to_remove:
+            log_parts = []
+            if to_add:
+                log_parts.append("picked up **" + ", ".join(r.name for r in to_add) + "**")
+            if to_remove:
+                log_parts.append("removed **" + ", ".join(r.name for r in to_remove) + "**")
+            await log_utils.send_log(
+                interaction.client, guild,
+                f"🎛️ {member.mention} {' and '.join(log_parts)} ({self.category_name})"
+            )
+
         summary = []
         if to_add:
             summary.append("Added: " + ", ".join(r.name for r in to_add))
@@ -72,6 +88,31 @@ class CategorySelect(discord.ui.Select):
             f"✅ **{self.category_name}** updated.\n" + "\n".join(summary),
             ephemeral=True
         )
+
+    async def _sync_divider(self, guild: discord.Guild, member: discord.Member):
+        """Add/remove this category's divider role based on whether the member still
+        holds any role from any category that shares that same divider."""
+        if not self.divider_role:
+            return
+
+        config = load_config()
+        sibling_role_names = {
+            r["role_name"]
+            for cat_data in config.values()
+            if cat_data.get("divider_role") == self.divider_role
+            for r in cat_data["roles"]
+        }
+
+        divider = discord.utils.get(guild.roles, name=self.divider_role)
+        if divider is None:
+            return  # admin hasn't created/renamed the divider role yet
+
+        has_any = any(name in sibling_role_names for name in (r.name for r in member.roles))
+
+        if has_any and divider not in member.roles:
+            await member.add_roles(divider, reason="Category divider sync")
+        elif not has_any and divider in member.roles:
+            await member.remove_roles(divider, reason="Category divider sync")
 
 
 class RolePickerView(discord.ui.View):
