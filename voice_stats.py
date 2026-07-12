@@ -1,40 +1,13 @@
 import os
-import json
 import discord
 from datetime import datetime, timezone
 from discord.ext import commands
 
+import json_store
+from time_utils import format_duration
+
 VOICE_CHANNEL_ID = os.getenv("VOICE_CHANNEL_ID")
 STATS_FILE = os.path.join("data", "voice_user_stats.json")
-
-
-def load_stats():
-    if os.path.exists(STATS_FILE):
-        try:
-            with open(STATS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {}
-
-
-def save_stats(data):
-    os.makedirs("data", exist_ok=True)
-    with open(STATS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-
-
-def format_duration(seconds: float) -> str:
-    total_minutes = int(seconds // 60)
-    hours, minutes = divmod(total_minutes, 60)
-    days, hours = divmod(hours, 24)
-    parts = []
-    if days:
-        parts.append(f"{days}d")
-    if hours or days:
-        parts.append(f"{hours}h")
-    parts.append(f"{minutes}m")
-    return " ".join(parts)
 
 
 class VoiceStats(commands.Cog):
@@ -43,7 +16,7 @@ class VoiceStats(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.target_channel_id = int(VOICE_CHANNEL_ID) if VOICE_CHANNEL_ID else None
-        self.stats = load_stats()          # {user_id: {"username": str, "total_seconds": float}}
+        self.stats = json_store.load_json(STATS_FILE, {})  # {user_id: {"username": str, "total_seconds": float}}
         self.active_sessions = {}          # {user_id: start_time datetime}
 
     def _start_session(self, member: discord.Member):
@@ -60,7 +33,7 @@ class VoiceStats(commands.Cog):
         record["username"] = member.display_name
         record["total_seconds"] += elapsed
         self.stats[user_id] = record
-        save_stats(self.stats)
+        json_store.save_json(STATS_FILE, self.stats)
 
     def _get_live_total(self, user_id: str) -> float:
         """Total time including whatever the current in-progress session has accrued so far."""

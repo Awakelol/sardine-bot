@@ -10,7 +10,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Set up intents (permissions the bot needs to "see" certain events)
 intents = discord.Intents.default()
-intents.members = True          # needed for welcome messages later
+intents.members = True          # needed for on_member_join, member caching, and role/user update events
 intents.message_content = True  # needed if we use text-based commands later
 
 # Create the bot
@@ -36,17 +36,24 @@ async def on_ready():
     bot.add_view(RoleButtonView())
     bot.add_view(RolePickerView())
 
-    # Load voice persistence cog (only once, on_ready can fire more than once on reconnects)
+    # Load cogs (only once — on_ready can fire more than once on reconnects)
+    # Voice channel tracking
     if "voice_persistence" not in bot.extensions:
         await bot.load_extension("voice_persistence")
     if "voice_stats" not in bot.extensions:
         await bot.load_extension("voice_stats")
+
+    # Community features
     if "rotating_status" not in bot.extensions:
         await bot.load_extension("rotating_status")
     if "lfg" not in bot.extensions:
         await bot.load_extension("lfg")
     if "ai_chat" not in bot.extensions:
         await bot.load_extension("ai_chat")
+    if "easter_eggs" not in bot.extensions:
+        await bot.load_extension("easter_eggs")
+
+    # Roles & moderation logging
     if "log_channel" not in bot.extensions:
         await bot.load_extension("log_channel")
     if "guild_tag_role" not in bot.extensions:

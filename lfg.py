@@ -5,6 +5,7 @@ from discord.ext import commands, tasks
 
 PENDING_TIMEOUT_MINUTES = 5
 LFG_EXPIRY_HOURS = 2
+AWAY_GRACE_MINUTES = 10  # window to return to VC before being dropped (or the post invalidated, for the creator)
 
 GAME_OPTIONS = ["R6 Siege", "League of Legends", "Valorant", "Apex Legends", "Brawlhalla", "Custom"]
 
@@ -35,9 +36,12 @@ class LFGPost:
         self.players_needed = players_needed
         self.flavor_text = flavor_text
         self.confirmed = []          # list of discord.Member
-        self.pending = {}            # {user_id: expiry datetime}
+        self.pending = {}            # {user_id: expiry datetime} — clicked Join, not yet in VC
+        self.member_away = {}        # {user_id: away_until datetime} — confirmed member briefly out of VC
+        self.creator_away_until = None
         self.invalidated = False
         self.invalidation_reason = None
+        self.old_rendered = False    # tracks whether we've already re-rendered the embed grey once "old"
         self.created_at = datetime.now(timezone.utc)
         self.message: discord.Message | None = None
 
@@ -45,10 +49,30 @@ class LFGPost:
     def is_full(self):
         return len(self.confirmed) >= self.players_needed
 
+    @property
+    def is_old(self):
+        return datetime.now(timezone.utc) - self.created_at >= timedelta(hours=LFG_EXPIRY_HOURS)
+
+    @staticmethod
+    def _minutes_left(deadline: datetime, now: datetime) -> int:
+        return max(1, int((deadline - now).total_seconds() // 60) + 1)
+
     def build_embed(self):
-        color = discord.Color.red() if self.invalidated else (
-            discord.Color.green() if self.is_full else discord.Color.blurple()
-        )
+        now = datetime.now(timezone.utc)
+
+        if self.is_old:
+            color = discord.Color.light_grey()
+            status_prefix = "⌛ OLD — "
+        elif self.invalidated:
+            color = discord.Color.red()
+            status_prefix = "❌ INVALID — "
+        elif self.is_full:
+            color = discord.Color.blue()
+            status_prefix = "✅ FULL — "
+        else:
+            color = discord.Color.green()
+            status_prefix = ""
+
         description_lines = []
         if self.flavor_text:
             description_lines.append(f"*{self.flavor_text}*\n")
@@ -56,18 +80,34 @@ class LFGPost:
             description_lines.append(f"**Mode:** {self.mode}")
         if self.elo:
             description_lines.append(f"**Elo:** {self.elo}")
-        description_lines.append(f"**Started by:** {self.creator.mention} in 🔊 {self.creator_voice_channel_name}")
 
-        joined_str = ", ".join(m.mention for m in self.confirmed) if self.confirmed else "*None yet*"
+        creator_line = f"**Started by:** {self.creator.mention} in 🔊 {self.creator_voice_channel_name}"
+        if self.creator_away_until and self.creator_away_until > now:
+            creator_line += f" — ⚠️ away, back within {self._minutes_left(self.creator_away_until, now)}m or this expires"
+        description_lines.append(creator_line)
+
+        if self.confirmed:
+            member_strs = []
+            for m in self.confirmed:
+                away_until = self.member_away.get(m.id)
+                if away_until and away_until > now:
+                    member_strs.append(f"{m.mention} (away, {self._minutes_left(away_until, now)}m to return)")
+                else:
+                    member_strs.append(m.mention)
+            joined_str = ", ".join(member_strs)
+        else:
+            joined_str = "*None yet*"
         description_lines.append(f"**Joined:** {joined_str}")
 
-        status_prefix = "❌ EXPIRED — " if self.invalidated else ("✅ FULL — " if self.is_full else "")
         title = f"{status_prefix}{self.game} | Players needed: {len(self.confirmed)}/{self.players_needed}"
 
         if self.invalidated:
             description_lines.append(f"\n*{self.invalidation_reason or 'This request is no longer active.'}*")
+        elif self.is_old:
+            description_lines.append(f"\n*This request is over {LFG_EXPIRY_HOURS} hours old.*")
 
         embed = discord.Embed(title=title, description="\n".join(description_lines), color=color)
+        embed.set_author(name=self.creator.display_name, icon_url=self.creator.display_avatar.url)
         return embed
 
 
@@ -328,18 +368,23 @@ class LFG(commands.Cog):
                 ephemeral=True
             )
 
-    async def confirm_member(self, post: LFGPost, member: discord.Member):
-        post.confirmed.append(member)
-        post.pending.pop(member.id, None)
+    async def refresh_embed(self, post: LFGPost):
         if post.message:
             try:
                 await post.message.edit(embed=post.build_embed())
             except discord.HTTPException as e:
                 print(f"⚠️ LFG embed update failed for post {post.id}: {e}")
 
+    async def confirm_member(self, post: LFGPost, member: discord.Member):
+        post.confirmed.append(member)
+        post.pending.pop(member.id, None)
+        await self.refresh_embed(post)
+
     async def invalidate_post(self, post: LFGPost, reason: str = "The creator left the voice channel, this request is no longer active."):
         post.invalidated = True
         post.invalidation_reason = reason
+        if post.is_old:
+            post.old_rendered = True
         if post.message:
             try:
                 await post.message.edit(embed=post.build_embed(), view=None)
@@ -348,33 +393,73 @@ class LFG(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before, after):
-        # Check if the creator of any active post left their voice channel
+        now = datetime.now(timezone.utc)
         for post in list(self.active_posts.values()):
             if post.invalidated:
                 continue
+
+            left_target = (
+                before.channel is not None and before.channel.id == post.creator_voice_channel_id
+                and (after.channel is None or after.channel.id != post.creator_voice_channel_id)
+            )
+            joined_target = (
+                after.channel is not None and after.channel.id == post.creator_voice_channel_id
+                and (before.channel is None or before.channel.id != post.creator_voice_channel_id)
+            )
+
             if member.id == post.creator.id:
-                if before.channel and before.channel.id == post.creator_voice_channel_id:
-                    if after.channel is None or after.channel.id != post.creator_voice_channel_id:
-                        await self.invalidate_post(post)
+                if left_target:
+                    if not post.confirmed:
+                        await self.invalidate_post(post, reason="The creator left before anyone joined.")
+                    else:
+                        post.creator_away_until = now + timedelta(minutes=AWAY_GRACE_MINUTES)
+                        await self.refresh_embed(post)
+                elif joined_target and post.creator_away_until is not None:
+                    post.creator_away_until = None
+                    await self.refresh_embed(post)
                 continue
 
-            # Check if a pending member just joined the right channel
-            if member.id in post.pending and after.channel and after.channel.id == post.creator_voice_channel_id:
+            if member.id in post.pending and joined_target:
                 await self.confirm_member(post, member)
+                continue
+
+            is_confirmed = any(m.id == member.id for m in post.confirmed)
+            if is_confirmed:
+                if left_target:
+                    post.member_away[member.id] = now + timedelta(minutes=AWAY_GRACE_MINUTES)
+                    await self.refresh_embed(post)
+                elif joined_target and member.id in post.member_away:
+                    post.member_away.pop(member.id, None)
+                    await self.refresh_embed(post)
 
     @tasks.loop(minutes=1)
     async def cleanup_pending(self):
         now = datetime.now(timezone.utc)
         for post in list(self.active_posts.values()):
-            expired = [uid for uid, expiry in post.pending.items() if expiry < now]
-            for uid in expired:
+            expired_pending = [uid for uid, expiry in post.pending.items() if expiry < now]
+            for uid in expired_pending:
                 post.pending.pop(uid, None)
 
-            if not post.invalidated and now - post.created_at >= timedelta(hours=LFG_EXPIRY_HOURS):
-                await self.invalidate_post(
-                    post,
-                    reason=f"This request expired after {LFG_EXPIRY_HOURS} hours."
-                )
+            if post.invalidated:
+                if post.is_old and not post.old_rendered:
+                    post.old_rendered = True
+                    await self.refresh_embed(post)
+                continue
+
+            if post.is_old:
+                await self.invalidate_post(post, reason=f"This request expired after {LFG_EXPIRY_HOURS} hours.")
+                continue
+
+            if post.creator_away_until and post.creator_away_until < now:
+                await self.invalidate_post(post, reason="The creator left and didn't return in time.")
+                continue
+
+            expired_away = [uid for uid, deadline in post.member_away.items() if deadline < now]
+            if expired_away:
+                for uid in expired_away:
+                    post.member_away.pop(uid, None)
+                post.confirmed = [m for m in post.confirmed if m.id not in expired_away]
+                await self.refresh_embed(post)
 
     @cleanup_pending.before_loop
     async def before_cleanup(self):

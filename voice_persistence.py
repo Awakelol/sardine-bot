@@ -1,43 +1,16 @@
 import os
-import json
 import asyncio
 import discord
 from datetime import datetime, timezone, timedelta
 from discord.ext import commands, tasks
 
+import json_store
+from time_utils import format_duration
+
 VOICE_CHANNEL_ID = os.getenv("VOICE_CHANNEL_ID")
 VOICE_LOG_CHANNEL_ID = os.getenv("VOICE_LOG_CHANNEL_ID")
 TIMER_FILE = os.path.join("data", "voice_timer.json")
 MILESTONE_HOURS = 200
-
-
-def load_timer_data():
-    if os.path.exists(TIMER_FILE):
-        try:
-            with open(TIMER_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {"start_time": None}
-
-
-def save_timer_data(data):
-    os.makedirs("data", exist_ok=True)
-    with open(TIMER_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-
-
-def format_duration(seconds: float) -> str:
-    total_minutes = int(seconds // 60)
-    hours, minutes = divmod(total_minutes, 60)
-    days, hours = divmod(hours, 24)
-    parts = []
-    if days:
-        parts.append(f"{days}d")
-    if hours or days:
-        parts.append(f"{hours}h")
-    parts.append(f"{minutes}m")
-    return " ".join(parts)
 
 
 class VoicePersistence(commands.Cog):
@@ -48,7 +21,7 @@ class VoicePersistence(commands.Cog):
         self.bot = bot
         self.target_channel_id = int(VOICE_CHANNEL_ID) if VOICE_CHANNEL_ID else None
         self.log_channel_id = int(VOICE_LOG_CHANNEL_ID) if VOICE_LOG_CHANNEL_ID else None
-        self.timer_data = load_timer_data()
+        self.timer_data = json_store.load_json(TIMER_FILE, {"start_time": None})
         self.startup_announced = False
         self.watchdog.start()
 
@@ -59,7 +32,7 @@ class VoicePersistence(commands.Cog):
         """Returns True if a brand-new timer was started, False if one was already running."""
         if self.timer_data.get("start_time") is None:
             self.timer_data["start_time"] = datetime.now(timezone.utc).isoformat()
-            save_timer_data(self.timer_data)
+            json_store.save_json(TIMER_FILE, self.timer_data)
             return True
         return False
 
@@ -72,7 +45,7 @@ class VoicePersistence(commands.Cog):
 
     def _reset_timer(self):
         self.timer_data["start_time"] = None
-        save_timer_data(self.timer_data)
+        json_store.save_json(TIMER_FILE, self.timer_data)
 
     async def announce_startup(self, started_fresh: bool):
         if self.startup_announced or not self.log_channel_id:
@@ -269,7 +242,7 @@ class VoicePersistence(commands.Cog):
         start = datetime.fromisoformat(start_str)
         adjusted_start = start - timedelta(minutes=minutes)
         self.timer_data["start_time"] = adjusted_start.isoformat()
-        save_timer_data(self.timer_data)
+        json_store.save_json(TIMER_FILE, self.timer_data)
 
         duration_str = format_duration(self._get_elapsed_seconds())
         sign = "+" if minutes >= 0 else ""

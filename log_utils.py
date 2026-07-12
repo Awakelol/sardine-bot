@@ -1,34 +1,19 @@
 import os
-import json
 import discord
+
+import json_store
 
 CONFIG_PATH = os.path.join("data", "log_channel_config.json")
 
 
-def _load() -> dict:
-    if os.path.exists(CONFIG_PATH):
-        try:
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {}
-
-
-def _save(data: dict):
-    os.makedirs("data", exist_ok=True)
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-
-
 def set_log_channel(guild_id: int, channel_id: int):
-    data = _load()
+    data = json_store.load_json(CONFIG_PATH, {})
     data[str(guild_id)] = channel_id
-    _save(data)
+    json_store.save_json(CONFIG_PATH, data)
 
 
 def get_log_channel_id(guild_id: int):
-    return _load().get(str(guild_id))
+    return json_store.load_json(CONFIG_PATH, {}).get(str(guild_id))
 
 
 async def send_log(bot: discord.Client, guild: discord.Guild, message: str):

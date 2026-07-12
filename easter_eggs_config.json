@@ -1,0 +1,18 @@
+[
+  {
+    "trigger": "can a robot write a symphony",
+    "response": "Can you?"
+  },
+  {
+    "triggers": [
+      "your mother shops at saks",
+      "yo momma",
+      "yo mama",
+      "your momma so",
+      "your mama so",
+      "your mom's so",
+      "your moms so"
+    ],
+    "response": "Oh, my God. You want to talk about mothers? You wanna talk about mothers!"
+  }
+]

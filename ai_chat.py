@@ -1,5 +1,4 @@
 import os
-import json
 import time
 import discord
 from datetime import datetime, timedelta, timezone
@@ -7,6 +6,8 @@ from discord.ext import commands
 from google import genai
 from google.genai import types
 from tavily import TavilyClient
+
+import json_store
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
@@ -55,28 +56,12 @@ def current_time_context() -> str:
     )
 
 
-def load_state():
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {"enabled": True}
-
-
-def save_state(data):
-    os.makedirs("data", exist_ok=True)
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-
-
 class AIChat(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
         self.tavily = TavilyClient(api_key=TAVILY_API_KEY) if TAVILY_API_KEY else None
-        self.state = load_state()
+        self.state = json_store.load_json(STATE_FILE, {"enabled": True})
         self.conversations = {}  # (channel_id, user_id) -> {"turns": [...], "last_active": float}
         print(f"🤖 AI Chat cog loaded — using model: {MODEL_NAME}")
         print(f"🔑 Gemini key present: {bool(GEMINI_API_KEY)}, Tavily key present: {bool(TAVILY_API_KEY)}")
@@ -218,7 +203,7 @@ class AIChat(commands.Cog):
     async def ai_toggle(self, interaction: discord.Interaction):
         current = self.state.get("enabled", True)
         self.state["enabled"] = not current
-        save_state(self.state)
+        json_store.save_json(STATE_FILE, self.state)
         status = "enabled ✅" if self.state["enabled"] else "disabled 🛑"
         await interaction.response.send_message(f"AI chatbot is now **{status}**.", ephemeral=True)
 
