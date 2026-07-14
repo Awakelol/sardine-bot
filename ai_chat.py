@@ -42,7 +42,10 @@ SYSTEM_INSTRUCTION = (
     "You can discuss current events and general knowledge when asked. "
     "Don't use excessive emojis or roleplay asterisk actions. Talk like a person texting, not a customer service bot. "
     "For anything live or ongoing (sports matches, elections, breaking news), don't assume it has concluded "
-    "unless the info you have clearly says so — hedge naturally instead ('still going as of my last check', etc)."
+    "unless the info you have clearly says so — hedge naturally instead ('still going as of my last check', etc). "
+    "This is a shared channel conversation — messages are prefixed with 'Name: message' so you know who's talking, "
+    "since more than one person may reply to you in the same thread. Never include that 'Name:' prefix in your own "
+    "replies, and address whoever most recently spoke unless it's clearly still about an earlier point someone else made."
 )
 
 
@@ -62,7 +65,7 @@ class AIChat(commands.Cog):
         self.client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
         self.tavily = TavilyClient(api_key=TAVILY_API_KEY) if TAVILY_API_KEY else None
         self.state = json_store.load_json(STATE_FILE, {"enabled": True})
-        self.conversations = {}  # (channel_id, user_id) -> {"turns": [...], "last_active": float}
+        self.conversations = {}  # channel_id -> {"turns": [...], "last_active": float} — shared per channel, not per user
         print(f"🤖 AI Chat cog loaded — using model: {MODEL_NAME}")
         print(f"🔑 Gemini key present: {bool(GEMINI_API_KEY)}, Tavily key present: {bool(TAVILY_API_KEY)}")
         print(f"⚙️ AI chat currently {'ENABLED' if self.state.get('enabled', True) else 'DISABLED'}")
@@ -76,9 +79,11 @@ class AIChat(commands.Cog):
             return []
         return convo["turns"]
 
-    def _remember(self, key, user_text: str, reply_text: str):
+    def _remember(self, key, author_name: str, user_text: str, reply_text: str):
         convo = self.conversations.setdefault(key, {"turns": [], "last_active": time.time()})
-        convo["turns"].append(types.Content(role="user", parts=[types.Part(text=user_text)]))
+        # Tagging the speaker matters since this history is shared across everyone in the channel,
+        # not just one user — without it the model can't tell who said what in a multi-person thread.
+        convo["turns"].append(types.Content(role="user", parts=[types.Part(text=f"{author_name}: {user_text}")]))
         convo["turns"].append(types.Content(role="model", parts=[types.Part(text=reply_text)]))
         convo["turns"] = convo["turns"][-HISTORY_MAX_TURNS * 2:]
         convo["last_active"] = time.time()
@@ -163,19 +168,21 @@ class AIChat(commands.Cog):
         if not user_text:
             user_text = "Say hi and ask what they need."
 
-        history_key = (message.channel.id, message.author.id)
+        history_key = message.channel.id
         history = self._get_history(history_key)
+        author_name = message.author.display_name
 
         async with message.channel.typing():
             try:
-                prompt = user_text
+                prompt = f"{author_name}: {user_text}"
                 search_query = self._build_search_query(history, user_text)
                 if search_query:
                     context = self._search_context(search_query)
                     if context:
                         prompt = (
                             f"Current web info that may help (search: \"{search_query}\"):\n{context}\n\n"
-                            f"Now answer this like yourself, in your own words: {user_text}"
+                            f"Now answer this like yourself, in your own words. The question was from "
+                            f"{author_name}: {user_text}"
                         )
 
                 response = self.client.models.generate_content(
@@ -195,7 +202,7 @@ class AIChat(commands.Cog):
         if len(reply_text) > 1900:
             reply_text = reply_text[:1900] + "..."
 
-        self._remember(history_key, user_text, reply_text)
+        self._remember(history_key, author_name, user_text, reply_text)
         await message.reply(reply_text, mention_author=False)
 
     @discord.app_commands.command(name="ai-toggle", description="Turn the AI chatbot on or off (admin only)")

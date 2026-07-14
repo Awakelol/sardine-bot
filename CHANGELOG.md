@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.2-alpha — 2026-07-13
+
+- Fixed AI chat memory being scoped per-user instead of per-channel, so replying to sardine as a different user lost all context
+
 ## v0.2.1-alpha — 2026-07-13
 
 - Added LFG auto-join: anyone who sits in the VC for 15min without clicking Join gets added to the squad automatically, including people already in the VC when the post is created
