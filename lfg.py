@@ -6,6 +6,7 @@ from discord.ext import commands, tasks
 PENDING_TIMEOUT_MINUTES = 5
 LFG_EXPIRY_HOURS = 2
 AWAY_GRACE_MINUTES = 10  # window to return to VC before being dropped (or the post invalidated, for the creator)
+AUTO_JOIN_MINUTES = 15  # auto-add anyone who just sits in the VC this long without clicking Join
 
 GAME_OPTIONS = ["R6 Siege", "League of Legends", "Valorant", "Apex Legends", "Brawlhalla", "Custom"]
 
@@ -38,6 +39,7 @@ class LFGPost:
         self.confirmed = []          # list of discord.Member
         self.pending = {}            # {user_id: expiry datetime} — clicked Join, not yet in VC
         self.member_away = {}        # {user_id: away_until datetime} — confirmed member briefly out of VC
+        self.auto_join_since = {}    # {user_id: seen_since datetime} — in VC but never clicked Join
         self.creator_away_until = None
         self.invalidated = False
         self.invalidation_reason = None
@@ -319,6 +321,11 @@ class LFG(commands.Cog):
             return
 
         post = LFGPost(member, game, mode, elo, players_needed, flavor_text)
+        now = datetime.now(timezone.utc)
+        # Anyone already sitting in the VC when the post goes up also starts the auto-join clock
+        for existing_member in member.voice.channel.members:
+            if not existing_member.bot and existing_member.id != member.id:
+                post.auto_join_since[existing_member.id] = now
         self.active_posts[post.id] = post
 
         view = JoinView(self, post)
@@ -431,6 +438,16 @@ class LFG(commands.Cog):
                 elif joined_target and member.id in post.member_away:
                     post.member_away.pop(member.id, None)
                     await self.refresh_embed(post)
+                continue
+
+            if member.bot:
+                continue
+
+            # Never clicked Join, just sitting in the VC — start/reset the auto-join clock
+            if joined_target:
+                post.auto_join_since[member.id] = now
+            elif left_target:
+                post.auto_join_since.pop(member.id, None)
 
     @tasks.loop(minutes=1)
     async def cleanup_pending(self):
@@ -460,6 +477,21 @@ class LFG(commands.Cog):
                     post.member_away.pop(uid, None)
                 post.confirmed = [m for m in post.confirmed if m.id not in expired_away]
                 await self.refresh_embed(post)
+
+            expired_auto = [
+                uid for uid, since in post.auto_join_since.items()
+                if now - since >= timedelta(minutes=AUTO_JOIN_MINUTES)
+            ]
+            if expired_auto:
+                channel = self.bot.get_channel(post.creator_voice_channel_id)
+                for uid in expired_auto:
+                    post.auto_join_since.pop(uid, None)
+                    if post.is_full or any(m.id == uid for m in post.confirmed):
+                        continue
+                    member = discord.utils.get(channel.members, id=uid) if channel else None
+                    if member is None:
+                        continue  # left without us catching the voice update, nothing to add
+                    await self.confirm_member(post, member)
 
     @cleanup_pending.before_loop
     async def before_cleanup(self):
