@@ -8,6 +8,7 @@ from google.genai import types
 from tavily import TavilyClient
 
 import json_store
+import mention_utils
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
@@ -88,19 +89,6 @@ class AIChat(commands.Cog):
         convo["turns"] = convo["turns"][-HISTORY_MAX_TURNS * 2:]
         convo["last_active"] = time.time()
 
-    async def _is_directed_at_bot(self, message: discord.Message) -> bool:
-        if self.bot.user.mentioned_in(message):
-            return True
-        if message.reference:
-            resolved = message.reference.resolved
-            if resolved is None:
-                try:
-                    resolved = await message.channel.fetch_message(message.reference.message_id)
-                except discord.HTTPException:
-                    return False
-            return isinstance(resolved, discord.Message) and resolved.author.id == self.bot.user.id
-        return False
-
     def _build_search_query(self, history: list, user_text: str) -> str | None:
         """Returns a self-contained search query if this message needs a live search, else None."""
         if not self.tavily:
@@ -156,7 +144,7 @@ class AIChat(commands.Cog):
             return
         if not self.state.get("enabled", True):
             return
-        if not await self._is_directed_at_bot(message):
+        if not await mention_utils.is_directed_at_bot(self.bot, message):
             return
 
         # Strip the mention out of the message so we don't send "<@bot_id> are you cool" to the model

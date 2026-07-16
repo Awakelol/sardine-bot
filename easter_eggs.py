@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 
 import json_store
+import mention_utils
 
 CONFIG_PATH = "easter_eggs_config.json"
 FUZZY_MATCH_THRESHOLD = 0.85  # 0-1, how close a misquote can be and still trigger
@@ -26,8 +27,9 @@ def _best_match_ratio(trigger: str, content: str) -> float:
 
 
 class EasterEggs(commands.Cog):
-    """Recognizes specific pop culture lines anywhere in chat (typo-tolerant) and replies
-    in kind. Add more triggers by editing easter_eggs_config.json — no code changes needed."""
+    """Recognizes specific pop culture lines when sardine is @mentioned or replied to
+    (typo-tolerant) and replies in kind. Add more triggers by editing
+    easter_eggs_config.json — no code changes needed."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -37,6 +39,8 @@ class EasterEggs(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
+            return
+        if not await mention_utils.is_directed_at_bot(self.bot, message):
             return
 
         content = message.content.lower()

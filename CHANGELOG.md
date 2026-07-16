@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.3-alpha — 2026-07-13
+
+- Fixed easter eggs firing on any message containing a trigger word (e.g. "mama") instead of only when sardine is mentioned or replied to; extracted shared mention/reply-detection into mention_utils.py
+
 ## v0.2.2-alpha — 2026-07-13
 
 - Fixed AI chat memory being scoped per-user instead of per-channel, so replying to sardine as a different user lost all context
