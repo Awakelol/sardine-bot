@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.4-alpha — 2026-07-13
+
+- Added two rotating statuses
+- Added `/set-temp-status` admin command to show a temporary status for a set number of minutes, then resume normal rotation automatically
+
 ## v0.2.3-alpha — 2026-07-13
 
 - Fixed easter eggs firing on any message containing a trigger word (e.g. "mama") instead of only when sardine is mentioned or replied to; extracted shared mention/reply-detection into mention_utils.py
