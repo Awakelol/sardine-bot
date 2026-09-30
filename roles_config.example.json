@@ -1,0 +1,32 @@
+{
+  "Genre Interests": {
+    "description": "Pick the genres you're into. You can select multiple.",
+    "max_values": 4,
+    "divider_role": "DIVIDER_INTERESTS",
+    "roles": [
+      { "label": "Souls-like", "emoji": "⚔️", "role_name": "Souls-like" },
+      { "label": "Roguelikes", "emoji": "🔁", "role_name": "Roguelikes" },
+      { "label": "FPS/Tactical Shooters", "emoji": "🔫", "role_name": "Shooters" },
+      { "label": "Story Driven Games", "emoji": "📖", "role_name": "Story Games" }
+    ]
+  },
+  "Game Updates": {
+    "description": "Get pinged when there's news for a specific game.",
+    "max_values": 3,
+    "divider_role": "DIVIDER_PINGS",
+    "roles": [
+      { "label": "Valorant Updates", "emoji": "🎯", "role_name": "Valorant Updates" },
+      { "label": "League Updates", "emoji": "🐉", "role_name": "League Updates" },
+      { "label": "Free Games/Steam Sale", "emoji": "🆓", "role_name": "Free Games" }
+    ]
+  },
+  "Server Pings": {
+    "description": "Choose what server notifications you want to receive.",
+    "max_values": 2,
+    "divider_role": "DIVIDER_PINGS",
+    "roles": [
+      { "label": "Announcements Ping", "emoji": "📢", "role_name": "Announcements Ping" },
+      { "label": "Events Ping", "emoji": "📅", "role_name": "Events Ping" }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+discord.py[voice]>=2.7.1
+python-dotenv>=1.2.2
+google-genai>=2.11.0
+tavily-python>=0.7.26

@@ -1,0 +1,29 @@
+# Environment and credentials
+.env
+.env.*
+!.env.example
+.dev.vars
+*.local.*
+
+# Server-specific config (copy the matching *.example.json to create these)
+status_config.json
+roles_config.json
+easter_eggs_config.json
+
+# Runtime state
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+
+# Editors and tools
+.vscode/
+.idea/
+.claude/
+
+# Logs
+*.log

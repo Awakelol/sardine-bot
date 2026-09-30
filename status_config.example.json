@@ -1,0 +1,9 @@
+{
+  "rotate_seconds": 120,
+  "statuses": [
+    { "type": "playing", "text": "with the role menu" },
+    { "type": "watching", "text": "the voice channel" },
+    { "type": "listening", "text": "your LFG requests" },
+    { "type": "competing", "text": "the ranked grind" }
+  ]
+}
